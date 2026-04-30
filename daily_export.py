@@ -801,6 +801,55 @@ def upsert_ai_summary(
     log("AI summary inserted")
 
 
+def export_ai_context(target_date: dt.date, normalized: dict[str, Any]) -> Path | None:
+    date_name = safe_filename_date(target_date)
+    journal_path = JOURNAL_DIR / f"{date_name}.md"
+    if not journal_path.exists():
+        log("Journal file missing; AI context skipped")
+        return None
+
+    AI_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = AI_DIR / f"{date_name}.ai-context.md"
+    time_items = summary_items_from_normalized(normalized)[:80]
+    journal_text = journal_path.read_text(encoding="utf-8")
+    lines = [
+        f"# {date_name} AI 分析上下文",
+        "",
+        "## 使用说明",
+        "把这整个文件发给 AI。要求 AI 只基于本文信息分析，不要编造事实。",
+        "",
+        "## 推荐提示词",
+        "请基于下面的日记和设备使用记录，输出：",
+        "1. 今日行为模式：3-5 条",
+        "2. 日记内容与行为数据之间的关系",
+        "3. 可能的长期复利行为和损耗行为",
+        "4. 明天最值得做的 3 个具体调整",
+        "5. 一个不超过 100 字的总结",
+        "",
+        "## 今日使用记录 Top",
+    ]
+    if time_items:
+        lines.extend(f"- {name}: {format_duration(duration)}" for name, duration in time_items)
+    else:
+        lines.append("- 暂无超过 1 分钟的使用记录。")
+
+    lines.extend(
+        [
+            "",
+            "## 标准化活动 JSON",
+            "```json",
+            json.dumps(normalized, ensure_ascii=False, indent=2),
+            "```",
+            "",
+            "## 当天日记",
+            journal_text,
+        ]
+    )
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    log(f"AI context exported: {out_path}")
+    return out_path
+
+
 def replace_ai_summary_section(text: str, block: str) -> str:
     marker_pattern = re.compile(
         r"<!-- daily_ai_summary:start -->.*?<!-- daily_ai_summary:end -->",
@@ -824,6 +873,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-adb", action="store_true", help="Skip Android ADB export.")
     parser.add_argument("--skip-journal", action="store_true", help="Skip Obsidian journal update.")
     parser.add_argument("--ai-summary", action="store_true", help="Use DeepSeek to insert an AI summary into the journal.")
+    parser.add_argument("--ai-context", action="store_true", help="Export a standalone Markdown context file for manual AI analysis.")
     return parser.parse_args()
 
 
@@ -850,6 +900,8 @@ def main() -> int:
 
     if not args.skip_journal:
         upsert_journal_from_normalized(target_date, normalized)
+        if args.ai_context:
+            export_ai_context(target_date, normalized)
         if args.ai_summary:
             upsert_ai_summary(target_date, activitywatch, android_exports, normalized)
 

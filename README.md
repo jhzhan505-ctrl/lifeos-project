@@ -69,6 +69,20 @@ py -3 daily_export.py --ai-summary
 
 如果没有设置 DeepSeek key，AI 总结会自动跳过，不影响时间记录。
 
+如果你想把日记单独拿出来发给任意 AI，运行：
+
+```bat
+py -3 daily_export.py --skip-adb --ai-context
+```
+
+它会生成：
+
+```text
+G:\我的云端硬盘\journal\_data\ai\YYYY-MM-DD.ai-context.md
+```
+
+这个 Markdown 包含当天日记、标准化活动 JSON、Top 使用记录和推荐提示词，可以直接复制给 DeepSeek、ChatGPT 或其他 AI。
+
 设置 DeepSeek：
 
 ```bat
@@ -92,12 +106,23 @@ G:\我的云端硬盘\journal\templates\daily.md
 
 ## 今日概览
 
+## 今日计划
+- 最重要的一件事：
+- 次重要事项：
+- 健康/运动：
+- 学习/长期积累：
+
 ## 今日目标
 
 ## 时间记录
 {{AUTO_TIME_RECORD}}
 
 ## 今日所想
+
+## 复利记录
+- 今天做了什么会让未来更容易：
+- 今天有什么行为在消耗未来：
+- 一个可以明天继续的小动作：
 
 ## 今日总结
 {{AUTO_AI_SUMMARY}}
@@ -214,6 +239,12 @@ py -3 daily_export.py --date 2026-04-30
 
 ```bat
 py -3 daily_export.py --skip-adb
+```
+
+导出可手动发给 AI 的上下文：
+
+```bat
+py -3 daily_export.py --skip-adb --ai-context
 ```
 
 跳过 ActivityWatch：

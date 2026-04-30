@@ -111,6 +111,32 @@ class DailyExportSmokeTest(unittest.TestCase):
         self.assertEqual(normalized["devices"]["pad"]["apps"][0]["label"], "Reader")
         self.assertEqual(normalized["devices"]["pad"]["apps"][0]["seconds"], 3600)
 
+    def test_ai_context_export_contains_journal_and_activity(self):
+        root = Path(tempfile.mkdtemp())
+        configure_temp_lifeos(root)
+        daily.JOURNAL_DIR.mkdir(parents=True, exist_ok=True)
+        (daily.JOURNAL_DIR / "2026-04-30.md").write_text(
+            "# 2026-04-30 日记\n## 今日所想\n今天专注学习。\n",
+            encoding="utf-8",
+        )
+
+        normalized = {
+            "date": "2026-04-30",
+            "schema_version": 1,
+            "devices": {
+                "computer": {"apps": [{"name": "Code", "seconds": 3600}], "websites": []},
+                "phone": {"apps": []},
+                "pad": {"apps": []},
+            },
+        }
+
+        out_path = daily.export_ai_context(dt.date(2026, 4, 30), normalized)
+        content = out_path.read_text(encoding="utf-8")
+
+        self.assertIn("今天专注学习", content)
+        self.assertIn("电脑 / Code: 1h 00m", content)
+        self.assertIn("标准化活动 JSON", content)
+
 
 if __name__ == "__main__":
     unittest.main()
