@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Logs and local generated data
+logs/
+*.log
+
+# Android/Gradle outputs
+.gradle/
+build/
+android-lifelogger/.gradle/
+android-lifelogger/**/build/
+*.apk
+*.aab
+
+# Local IDE files
+.idea/
+.vscode/
+*.iml
+
+# Local secrets
+.env
+secrets.*

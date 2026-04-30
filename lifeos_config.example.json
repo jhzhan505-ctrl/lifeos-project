@@ -1,0 +1,28 @@
+{
+  "journal_root": "G:\\我的云端硬盘\\journal",
+  "activitywatch_base_url": "http://localhost:5600",
+  "daily_note_dir": "daily",
+  "daily_template": "templates/daily.md",
+  "minimum_seconds_in_note": 60,
+  "computer_export_time": "23:30",
+  "android_export_time": "23:25",
+  "ai": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "enabled": false
+  },
+  "devices": {
+    "computer": {
+      "enabled": true,
+      "source": "activitywatch"
+    },
+    "phone": {
+      "enabled": true,
+      "source": "android-agent"
+    },
+    "pad": {
+      "enabled": true,
+      "source": "android-agent"
+    }
+  }
+}

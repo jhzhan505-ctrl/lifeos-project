@@ -1,0 +1,40 @@
+name: Build Android Agent
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "android-lifelogger/**"
+      - ".github/workflows/android-agent.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Build debug APK
+        working-directory: android-lifelogger
+        run: gradle :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: life-logger-debug-apk
+          path: android-lifelogger/app/build/outputs/apk/debug/app-debug.apk
