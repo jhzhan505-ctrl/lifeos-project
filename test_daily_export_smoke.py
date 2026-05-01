@@ -45,9 +45,11 @@ class DailyExportSmokeTest(unittest.TestCase):
         daily.upsert_journal_time_record(dt.date(2026, 4, 30), activitywatch, android_exports)
 
         note = (daily.JOURNAL_DIR / "2026-04-30.md").read_text(encoding="utf-8")
-        self.assertIn("电脑 / Code: 2h 00m", note)
-        self.assertIn("电脑 / Chrome: 30m", note)
-        self.assertIn("网站 / example.com: 10m", note)
+        self.assertIn("### 电脑应用", note)
+        self.assertIn("- Code: 2h 00m", note)
+        self.assertIn("- Chrome: 30m", note)
+        self.assertIn("### 网站", note)
+        self.assertIn("- example.com: 10m", note)
 
     def test_normalized_activity_file_is_written(self):
         root = Path(tempfile.mkdtemp())
@@ -88,7 +90,8 @@ class DailyExportSmokeTest(unittest.TestCase):
         daily.upsert_journal_time_record(dt.date(2026, 4, 30), activitywatch, android_exports)
 
         note = (daily.JOURNAL_DIR / "2026-04-30.md").read_text(encoding="utf-8")
-        self.assertIn("手机 / Chat: 4m", note)
+        self.assertIn("### 手机", note)
+        self.assertIn("- Chat: 4m", note)
 
     def test_android_agent_json_is_loaded_from_long_term_raw_dir(self):
         root = Path(tempfile.mkdtemp())
@@ -156,6 +159,49 @@ class DailyExportSmokeTest(unittest.TestCase):
 
         self.assertNotIn("Unknown", summary["apps"])
         self.assertEqual(summary["websites"]["example.com"], 120)
+
+    def test_grouped_summary_filters_system_items(self):
+        normalized = {
+            "devices": {
+                "computer": {
+                    "apps": [
+                        {"name": "explorer.exe", "seconds": 9999},
+                        {"name": "Code.exe", "seconds": 3600, "top_ranges": ["09:00-10:00"]},
+                    ],
+                    "websites": [
+                        {"domain": "127.0.0.1:53682", "seconds": 9999},
+                        {"domain": "github.com", "seconds": 1800, "top_ranges": ["10:00-10:30"]},
+                    ],
+                },
+                "phone": {"apps": [{"label": "FolderSync", "package": "x", "seconds": 9999}, {"label": "WeChat", "package": "com.tencent.mm", "seconds": 120}]},
+                "pad": {"apps": [{"label": "Reader", "package": "com.example.reader", "seconds": 240}]},
+            }
+        }
+
+        block = daily.build_grouped_time_record_block(
+            dt.date(2026, 4, 30),
+            daily.grouped_summary_from_normalized(normalized),
+        )
+
+        self.assertIn("### 电脑应用", block)
+        self.assertIn("- Code.exe: 1h 00m（主要时段：09:00-10:00）", block)
+        self.assertIn("### 网站", block)
+        self.assertIn("- github.com: 30m", block)
+        self.assertIn("### 手机", block)
+        self.assertIn("- WeChat: 2m", block)
+        self.assertIn("### 平板", block)
+        self.assertNotIn("explorer.exe", block)
+        self.assertNotIn("FolderSync", block)
+
+    def test_create_daily_note_from_template(self):
+        root = Path(tempfile.mkdtemp())
+        configure_temp_lifeos(root)
+
+        path = daily.create_daily_note(dt.date(2026, 5, 2))
+        content = path.read_text(encoding="utf-8")
+
+        self.assertIn("# 2026-05-02 日记", content)
+        self.assertIn("## 今日计划", content)
 
 
 if __name__ == "__main__":

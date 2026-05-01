@@ -295,6 +295,14 @@ py -3 daily_export.py --skip-adb --ai-context
 py -3 daily_export.py --skip-aw
 ```
 
+晚上生成明天的计划日记：
+
+```bat
+py -3 daily_export.py --tomorrow --create-note
+```
+
+它只会创建 `daily/YYYY-MM-DD.md`，不会导出 ActivityWatch，也不会写时间记录。已有日记默认不覆盖。
+
 ## 验证
 
 运行测试：

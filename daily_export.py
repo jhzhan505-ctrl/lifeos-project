@@ -55,6 +55,24 @@ EXPORT_DIR = DRIVE_ROOT / "activitywatch"
 MIN_SECONDS_IN_NOTE = 60
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
+FILTERED_COMPUTER_APPS = {
+    "explorer.exe",
+    "ShellHost.exe",
+    "GoogleDriveFS.exe",
+    "SearchHost.exe",
+    "ApplicationFrameHost.exe",
+    "TextInputHost.exe",
+    "StartMenuExperienceHost.exe",
+    "SystemSettings.exe",
+}
+FILTERED_ANDROID_LABELS = {
+    "FolderSync",
+    "Life Logger",
+    "ActivityWatch",
+}
+FILTERED_WEBSITE_DOMAINS = {
+    "127.0.0.1:53682",
+}
 
 SYSTEM_PACKAGE_PREFIXES = (
     "android",
@@ -581,13 +599,14 @@ def normalize_activity_data(
         normalized["devices"]["computer"]["apps"] = [
             {"name": name, "seconds": seconds(duration), "source": "activitywatch"}
             for name, duration in sorted(apps.items(), key=lambda item: seconds(item[1]), reverse=True)
-            if seconds(duration) >= MIN_SECONDS_IN_NOTE
+            if seconds(duration) >= MIN_SECONDS_IN_NOTE and not should_filter_computer_app(name)
         ]
         normalized["devices"]["computer"]["websites"] = [
             {"domain": domain, "seconds": seconds(duration), "source": "activitywatch"}
             for domain, duration in sorted(websites.items(), key=lambda item: seconds(item[1]), reverse=True)
-            if seconds(duration) >= MIN_SECONDS_IN_NOTE
+            if seconds(duration) >= MIN_SECONDS_IN_NOTE and not should_filter_website(domain)
         ]
+        enrich_activitywatch_time_ranges(activitywatch, normalized)
 
     for label, exported in android_exports.items():
         if label not in ("phone", "pad"):
@@ -606,7 +625,11 @@ def normalize_activity_data(
                     "source": exported.get("source", "android"),
                 }
             )
-        normalized["devices"][label]["apps"] = sorted(apps, key=lambda item: item["seconds"], reverse=True)
+        normalized["devices"][label]["apps"] = sorted(
+            [app for app in apps if not should_filter_android_app(app)],
+            key=lambda item: item["seconds"],
+            reverse=True,
+        )
 
     if write_file:
         NORMALIZED_DIR.mkdir(parents=True, exist_ok=True)
@@ -614,6 +637,73 @@ def normalize_activity_data(
         write_json(out_path, normalized)
         log(f"Normalized activity written: {out_path}")
     return normalized
+
+
+def should_filter_computer_app(name: str) -> bool:
+    return name in FILTERED_COMPUTER_APPS or name.lower() == "unknown"
+
+
+def should_filter_android_app(app: dict[str, Any]) -> bool:
+    label = str(app.get("label") or "")
+    package = str(app.get("package") or "")
+    return label in FILTERED_ANDROID_LABELS or is_system_package(package)
+
+
+def should_filter_website(domain: str) -> bool:
+    return domain in FILTERED_WEBSITE_DOMAINS
+
+
+def enrich_activitywatch_time_ranges(activitywatch: dict[str, Any], normalized: dict[str, Any]) -> None:
+    app_ranges: dict[str, list[tuple[str, str, float]]] = defaultdict(list)
+    site_ranges: dict[str, list[tuple[str, str, float]]] = defaultdict(list)
+
+    for bucket_id, bucket in (activitywatch.get("buckets") or {}).items():
+        bucket_lower = bucket_id.lower()
+        events = bucket.get("events") or []
+        for event in events:
+            data = event.get("data") or {}
+            duration = seconds(event.get("duration"))
+            if duration < MIN_SECONDS_IN_NOTE:
+                continue
+            start = parse_event_start(event)
+            if not start:
+                continue
+            end = start + dt.timedelta(seconds=duration)
+            start_text = start.astimezone().strftime("%H:%M")
+            end_text = end.astimezone().strftime("%H:%M")
+
+            if "window" in bucket_lower and data.get("app"):
+                app = str(data.get("app"))
+                if not should_filter_computer_app(app):
+                    app_ranges[app].append((start_text, end_text, duration))
+
+            url = str(data.get("url") or data.get("audible_url") or "")
+            if url:
+                domain = urllib.parse.urlparse(url).netloc.lower() or url
+                if not should_filter_website(domain):
+                    site_ranges[domain].append((start_text, end_text, duration))
+
+    for app in normalized["devices"]["computer"]["apps"]:
+        app["top_ranges"] = format_top_ranges(app_ranges.get(app["name"], []))
+    for site in normalized["devices"]["computer"]["websites"]:
+        site["top_ranges"] = format_top_ranges(site_ranges.get(site["domain"], []))
+
+
+def parse_event_start(event: dict[str, Any]) -> dt.datetime | None:
+    value = event.get("timestamp") or event.get("time")
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def format_top_ranges(ranges: list[tuple[str, str, float]], limit: int = 3) -> list[str]:
+    return [
+        f"{start}-{end}"
+        for start, end, _duration in sorted(ranges, key=lambda item: item[2], reverse=True)[:limit]
+    ]
 
 
 def summary_items_from_normalized(normalized: dict[str, Any]) -> list[tuple[str, float]]:
@@ -637,6 +727,51 @@ def summary_items_from_normalized(normalized: dict[str, Any]) -> list[tuple[str,
         key=lambda item: item[1],
         reverse=True,
     )
+
+
+def grouped_summary_from_normalized(normalized: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    devices = normalized.get("devices") or {}
+    groups: list[tuple[str, list[str]]] = []
+
+    computer_lines = [
+        format_usage_line(app.get("name", "Unknown"), app.get("seconds"), app.get("top_ranges"))
+        for app in (devices.get("computer") or {}).get("apps") or []
+        if not should_filter_computer_app(str(app.get("name", "Unknown")))
+    ]
+    website_lines = [
+        format_usage_line(site.get("domain", "unknown"), site.get("seconds"), site.get("top_ranges"))
+        for site in (devices.get("computer") or {}).get("websites") or []
+        if not should_filter_website(str(site.get("domain", "unknown")))
+    ]
+    phone_lines = [
+        format_usage_line(app.get("label") or app.get("package") or "Unknown", app.get("seconds"), app.get("top_ranges"))
+        for app in (devices.get("phone") or {}).get("apps") or []
+        if not should_filter_android_app(app)
+    ]
+    pad_lines = [
+        format_usage_line(app.get("label") or app.get("package") or "Unknown", app.get("seconds"), app.get("top_ranges"))
+        for app in (devices.get("pad") or {}).get("apps") or []
+        if not should_filter_android_app(app)
+    ]
+
+    for title, lines in (
+        ("电脑应用", computer_lines),
+        ("网站", website_lines),
+        ("手机", phone_lines),
+        ("平板", pad_lines),
+    ):
+        groups.append((title, [line for line in lines if line]))
+    return groups
+
+
+def format_usage_line(name: str, duration: Any, ranges: Any = None) -> str:
+    duration_seconds = seconds(duration)
+    if duration_seconds < MIN_SECONDS_IN_NOTE:
+        return ""
+    suffix = ""
+    if ranges:
+        suffix = f"（主要时段：{', '.join(ranges)}）"
+    return f"- {name}: {format_duration(duration_seconds)}{suffix}"
 
 
 def android_app_display_name(exported: dict[str, Any], package: str) -> str:
@@ -664,10 +799,22 @@ def upsert_journal_from_normalized(target_date: dt.date, normalized: dict[str, A
     else:
         text = render_daily_template(target_date)
 
-    block = build_time_record_block(target_date, summary_items_from_normalized(normalized))
+    block = build_grouped_time_record_block(target_date, grouped_summary_from_normalized(normalized))
     updated = replace_time_record_section(text, block)
     journal_path.write_text(updated, encoding="utf-8")
     log(f"Journal updated: {journal_path}")
+
+
+def create_daily_note(target_date: dt.date, overwrite: bool = False) -> Path:
+    ensure_lifeos_structure()
+    date_name = safe_filename_date(target_date)
+    journal_path = JOURNAL_DIR / f"{date_name}.md"
+    if journal_path.exists() and not overwrite:
+        log(f"Daily note already exists: {journal_path}")
+        return journal_path
+    journal_path.write_text(render_daily_template(target_date), encoding="utf-8")
+    log(f"Daily note created: {journal_path}")
+    return journal_path
 
 
 def render_daily_template(target_date: dt.date) -> str:
@@ -693,6 +840,25 @@ def build_time_record_block(target_date: dt.date, items: list[tuple[str, float]]
     if items:
         lines.extend(f"- {name}: {format_duration(duration)}" for name, duration in items)
     else:
+        lines.append("- 暂无超过 1 分钟的使用记录。")
+    lines.append("<!-- daily_export:end -->")
+    return "\n".join(lines)
+
+
+def build_grouped_time_record_block(target_date: dt.date, groups: list[tuple[str, list[str]]]) -> str:
+    generated = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "<!-- daily_export:start -->",
+        f"- 自动汇总时间：{generated}",
+    ]
+    has_items = False
+    for title, items in groups:
+        if not items:
+            continue
+        has_items = True
+        lines.append(f"### {title}")
+        lines.extend(items)
+    if not has_items:
         lines.append("- 暂无超过 1 分钟的使用记录。")
     lines.append("<!-- daily_export:end -->")
     return "\n".join(lines)
@@ -885,6 +1051,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-journal", action="store_true", help="Skip Obsidian journal update.")
     parser.add_argument("--ai-summary", action="store_true", help="Use DeepSeek to insert an AI summary into the journal.")
     parser.add_argument("--ai-context", action="store_true", help="Export a standalone Markdown context file for manual AI analysis.")
+    parser.add_argument("--create-note", action="store_true", help="Create the daily note from the template and exit.")
+    parser.add_argument("--tomorrow", action="store_true", help="Use tomorrow as the target date.")
+    parser.add_argument("--overwrite-note", action="store_true", help="Overwrite an existing note when used with --create-note.")
     return parser.parse_args()
 
 
@@ -893,10 +1062,16 @@ def main() -> int:
     ensure_lifeos_structure()
     if args.date:
         target_date = dt.datetime.strptime(args.date, "%Y-%m-%d").date()
+    elif args.tomorrow:
+        target_date = dt.date.today() + dt.timedelta(days=1)
     else:
         target_date = dt.date.today()
 
     log(f"Daily export started for {target_date}")
+
+    if args.create_note:
+        create_daily_note(target_date, overwrite=args.overwrite_note)
+        return 0
 
     existing_activitywatch, existing_android_exports = load_existing_exports(target_date)
 
