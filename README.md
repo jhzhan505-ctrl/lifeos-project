@@ -58,6 +58,20 @@ D:\LifeOS\journal
 setx LIFEOS_JOURNAL_ROOT "D:\LifeOS\journal"
 ```
 
+电脑端使用 rclone 把本地 vault 同步到 Google Drive 的 `journal`：
+
+```text
+D:\LifeOS\journal <-> gdrive:journal
+```
+
+每天计划任务执行：
+
+1. `sync_from_cloud.bat`：从云端拉取手机、平板和日记更新。
+2. `daily_export.py`：导出电脑 ActivityWatch，生成 normalized，更新日记。
+3. `sync_to_cloud.bat`：把电脑生成的日记和数据推回云端。
+
+同步策略是保守的：不删除文件，较新的文件覆盖较旧的文件，并排除 `.obsidian`。
+
 ## 每天自动流程
 
 1. 手机 Android Agent 导出当天使用数据到 `journal/_data/raw/phone`。
