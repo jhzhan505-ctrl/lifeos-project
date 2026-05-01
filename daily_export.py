@@ -219,10 +219,11 @@ def summarize_activitywatch_bucket(bucket_id: str, events: list[dict[str, Any]],
         has_window_data = data.get("app") or data.get("title")
         has_web_data = data.get("url") or data.get("audible_url")
 
-        if is_window_bucket or has_window_data:
+        if is_window_bucket or (has_window_data and not has_web_data):
             app = str(data.get("app") or "Unknown").strip() or "Unknown"
             title = str(data.get("title") or "").strip()
-            summary["apps"][app] = summary["apps"].get(app, 0) + duration
+            if app != "Unknown":
+                summary["apps"][app] = summary["apps"].get(app, 0) + duration
             if title:
                 key = f"{app} - {title}"
                 summary["windows"][key] = summary["windows"].get(key, 0) + duration

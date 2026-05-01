@@ -137,6 +137,26 @@ class DailyExportSmokeTest(unittest.TestCase):
         self.assertIn("电脑 / Code: 1h 00m", content)
         self.assertIn("标准化活动 JSON", content)
 
+    def test_web_bucket_title_does_not_create_unknown_app(self):
+        summary = {"apps": {}, "windows": {}, "websites": {}}
+
+        daily.summarize_activitywatch_bucket(
+            "aw-watcher-web-chrome",
+            [
+                {
+                    "duration": 120,
+                    "data": {
+                        "url": "https://example.com/page",
+                        "title": "Example page",
+                    },
+                }
+            ],
+            summary,
+        )
+
+        self.assertNotIn("Unknown", summary["apps"])
+        self.assertEqual(summary["websites"]["example.com"], 120)
+
 
 if __name__ == "__main__":
     unittest.main()
