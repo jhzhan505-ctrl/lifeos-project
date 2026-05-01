@@ -33,7 +33,7 @@ if errorlevel 1 (
 
 echo.
 echo Creating Windows scheduled task: %TASK_NAME%
-set "TASK_CMD=cmd /c cd /d ""%SCRIPT_DIR%"" && py -3 ""%SCRIPT_DIR%daily_export.py"" --ai-summary >> ""%LOG_FILE%"" 2>>&1"
+set "TASK_CMD=""%SCRIPT_DIR%run_daily_export.bat"""
 schtasks /Create /TN "%TASK_NAME%" /SC DAILY /ST 23:30 /TR "%TASK_CMD%" /F
 if errorlevel 1 (
   echo Failed to create scheduled task.

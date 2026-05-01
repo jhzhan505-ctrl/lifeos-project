@@ -4,10 +4,32 @@
 
 ## 核心结构
 
-唯一同步中心是 Google Drive 里的 Obsidian vault：
+唯一同步中心是 Google Drive 云端的 `journal`，但电脑端脚本写入本地真实目录，避免直接写 `G:` 虚拟盘。
+
+电脑本地 vault：
 
 ```text
-G:\我的云端硬盘\journal
+D:\LifeOS\journal
+```
+
+手机/平板通过 FolderSync 同步到 Google Drive 云端：
+
+```text
+journal
+```
+
+电脑再通过 Google Drive for Desktop 同步本地文件夹：
+
+```text
+D:\LifeOS\journal
+```
+
+到云端 `journal`。
+
+vault 内部结构：
+
+```text
+D:\LifeOS\journal
 ├─ daily
 │  └─ YYYY-MM-DD.md
 ├─ templates
@@ -29,6 +51,12 @@ G:\我的云端硬盘\journal
 ```
 
 不要再单独同步 `G:\我的云端硬盘\activitywatch`。手机、平板、电脑都围绕 `journal` 这个 vault 工作。
+
+脚本默认使用 `D:\LifeOS\journal`。如需改路径，设置环境变量：
+
+```bat
+setx LIFEOS_JOURNAL_ROOT "D:\LifeOS\journal"
+```
 
 ## 每天自动流程
 
@@ -94,7 +122,7 @@ setx DEEPSEEK_API_KEY "你的 DeepSeek API Key"
 模板位于：
 
 ```text
-G:\我的云端硬盘\journal\templates\daily.md
+D:\LifeOS\journal\templates\daily.md
 ```
 
 首次运行时脚本会自动创建默认模板。你可以自由修改模板，只要保留标题或自动块即可。
@@ -215,8 +243,8 @@ Android Agent 的长期能力：
 在 Android Agent 完成前，`daily_export.py` 仍保留 ADB 采集能力。ADB 数据也会写入长期目录：
 
 ```text
-G:\我的云端硬盘\journal\_data\raw\phone\YYYY-MM-DD.android.json
-G:\我的云端硬盘\journal\_data\raw\pad\YYYY-MM-DD.android.json
+D:\LifeOS\journal\_data\raw\phone\YYYY-MM-DD.android.json
+D:\LifeOS\journal\_data\raw\pad\YYYY-MM-DD.android.json
 ```
 
 如果手机或平板未连接，脚本会跳过，不影响电脑数据和日记更新。

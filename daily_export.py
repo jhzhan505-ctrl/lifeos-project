@@ -37,7 +37,7 @@ from typing import Any
 
 ACTIVITYWATCH_BASE_URL = "http://localhost:5600"
 DRIVE_ROOT = Path(r"G:\我的云端硬盘")
-JOURNAL_ROOT = DRIVE_ROOT / "journal"
+JOURNAL_ROOT = Path(os.environ.get("LIFEOS_JOURNAL_ROOT", r"D:\LifeOS\journal"))
 JOURNAL_DIR = JOURNAL_ROOT / "daily"
 TEMPLATE_DIR = JOURNAL_ROOT / "templates"
 DAILY_TEMPLATE_PATH = TEMPLATE_DIR / "daily.md"

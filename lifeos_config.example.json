@@ -1,5 +1,5 @@
 {
-  "journal_root": "G:\\我的云端硬盘\\journal",
+  "journal_root": "D:\\LifeOS\\journal",
   "activitywatch_base_url": "http://localhost:5600",
   "daily_note_dir": "daily",
   "daily_template": "templates/daily.md",
