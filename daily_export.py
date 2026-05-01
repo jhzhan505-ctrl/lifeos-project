@@ -106,10 +106,19 @@ def default_daily_template() -> str:
     return (
         "# {{date}} 日记\n"
         "## 今日概览\n"
+        "## 今日计划\n"
+        "- 最重要的一件事：\n"
+        "- 次重要事项：\n"
+        "- 健康/运动：\n"
+        "- 学习/长期积累：\n"
         "## 今日目标\n"
         "## 时间记录\n"
         "{{AUTO_TIME_RECORD}}\n"
         "## 今日所想\n"
+        "## 复利记录\n"
+        "- 今天做了什么会让未来更容易：\n"
+        "- 今天有什么行为在消耗未来：\n"
+        "- 一个可以明天继续的小动作：\n"
         "## 今日总结\n"
         "{{AUTO_AI_SUMMARY}}\n"
         "## 学习记录\n"
@@ -668,6 +677,7 @@ def render_daily_template(target_date: dt.date) -> str:
         template = default_daily_template()
     return (
         template.replace("{{date}}", date_name)
+        .replace("{{date:YYYY-MM-DD}}", date_name)
         .replace("{{AUTO_TIME_RECORD}}", "")
         .replace("{{AUTO_AI_SUMMARY}}", "")
     )
