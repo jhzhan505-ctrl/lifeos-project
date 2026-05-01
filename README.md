@@ -245,6 +245,7 @@ FolderSync 继续同步整个 `journal` vault。
 Android Agent 的长期能力：
 
 - 使用 Android UsageStats 读取 app 使用时间。
+- 导出 `app_events`，电脑端可显示手机/平板主要使用时段。
 - 不需要 root、Bootloader 解锁、USB 调试或 Tasker。
 - 每天 23:25 自动导出。
 - 打开 app 时静默补导最近 3 天。

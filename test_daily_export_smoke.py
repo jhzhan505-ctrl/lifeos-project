@@ -203,6 +203,61 @@ class DailyExportSmokeTest(unittest.TestCase):
         self.assertIn("# 2026-05-02 日记", content)
         self.assertIn("## 今日计划", content)
 
+    def test_activitywatch_afk_filter_clips_long_events(self):
+        activitywatch = {
+            "buckets": {
+                "aw-watcher-afk_test": {
+                    "events": [
+                        {
+                            "timestamp": "2026-04-30T01:00:00+00:00",
+                            "duration": 3600,
+                            "data": {"status": "not-afk"},
+                        }
+                    ]
+                },
+                "aw-watcher-window_test": {
+                    "events": [
+                        {
+                            "timestamp": "2026-04-30T00:00:00+00:00",
+                            "duration": 7200,
+                            "data": {"app": "Code", "title": "work"},
+                        }
+                    ]
+                },
+            },
+            "summary": {"apps": {"Code": 7200}, "windows": {}, "websites": {}},
+        }
+
+        filtered = daily.apply_activitywatch_afk_filter(activitywatch)
+
+        self.assertEqual(filtered["summary"]["apps"]["Code"], 3600)
+        self.assertTrue(filtered["afk_filter"]["enabled"])
+
+    def test_android_events_create_top_ranges(self):
+        exported = {
+            "source": "android_lifelogger",
+            "apps": {"com.example.reader": 3600},
+            "app_details": [{"package": "com.example.reader", "label": "Reader"}],
+            "app_events": [
+                {
+                    "package": "com.example.reader",
+                    "label": "Reader",
+                    "start_ts": 1777500000,
+                    "end_ts": 1777503600,
+                    "duration_seconds": 3600,
+                }
+            ],
+        }
+
+        normalized = daily.normalize_activity_data(
+            dt.date(2026, 4, 30),
+            None,
+            {"phone": exported},
+            write_file=False,
+        )
+
+        self.assertEqual(normalized["devices"]["phone"]["apps"][0]["top_ranges"], ["06:00-07:00"])
+
 
 if __name__ == "__main__":
     unittest.main()

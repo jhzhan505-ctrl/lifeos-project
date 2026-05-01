@@ -3,6 +3,7 @@ package com.example.lifelogger;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.app.AppOpsManager;
+import android.app.usage.UsageEvents;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
@@ -25,6 +26,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.HashMap;
 
 public final class UsageExporter {
     private UsageExporter() {
@@ -109,6 +111,7 @@ public final class UsageExporter {
         }
         root.put("apps", apps);
         root.put("app_details", appDetails);
+        root.put("app_events", buildAppEvents(context, packageManager, begin, end));
 
         String fileName = date + ".android.json";
         writeToTree(context, Uri.parse(treeUriString), fileName, root.toString(2));
@@ -117,6 +120,64 @@ public final class UsageExporter {
                 .putLong("last_export_at", System.currentTimeMillis())
                 .apply();
         return new ExportResult(fileName, usages.size());
+    }
+
+    private static JSONArray buildAppEvents(Context context, PackageManager packageManager, long begin, long end) throws Exception {
+        UsageStatsManager manager = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        UsageEvents usageEvents = manager.queryEvents(begin, end);
+        UsageEvents.Event event = new UsageEvents.Event();
+        Map<String, Long> openStarts = new HashMap<>();
+        JSONArray result = new JSONArray();
+
+        while (usageEvents.hasNextEvent()) {
+            usageEvents.getNextEvent(event);
+            String packageName = event.getPackageName();
+            if (packageName == null || isSystemPackage(packageName)) {
+                continue;
+            }
+
+            int eventType = event.getEventType();
+            long timestamp = event.getTimeStamp();
+            if (eventType == UsageEvents.Event.MOVE_TO_FOREGROUND
+                    || eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                openStarts.put(packageName, timestamp);
+            } else if (eventType == UsageEvents.Event.MOVE_TO_BACKGROUND
+                    || eventType == UsageEvents.Event.ACTIVITY_PAUSED
+                    || eventType == UsageEvents.Event.ACTIVITY_STOPPED) {
+                Long start = openStarts.remove(packageName);
+                if (start == null || timestamp <= start) {
+                    continue;
+                }
+                long seconds = (timestamp - start) / 1000;
+                if (seconds < 10) {
+                    continue;
+                }
+                JSONObject item = new JSONObject();
+                item.put("package", packageName);
+                item.put("label", labelFor(packageManager, packageName));
+                item.put("start_ts", start / 1000);
+                item.put("end_ts", timestamp / 1000);
+                item.put("duration_seconds", seconds);
+                result.put(item);
+            }
+        }
+
+        long cappedEnd = Math.min(end, System.currentTimeMillis());
+        for (Map.Entry<String, Long> open : openStarts.entrySet()) {
+            long seconds = (cappedEnd - open.getValue()) / 1000;
+            if (seconds < 10) {
+                continue;
+            }
+            JSONObject item = new JSONObject();
+            item.put("package", open.getKey());
+            item.put("label", labelFor(packageManager, open.getKey()));
+            item.put("start_ts", open.getValue() / 1000);
+            item.put("end_ts", cappedEnd / 1000);
+            item.put("duration_seconds", seconds);
+            item.put("open_ended", true);
+            result.put(item);
+        }
+        return result;
     }
 
     public static boolean hasUsageAccess(Context context) {

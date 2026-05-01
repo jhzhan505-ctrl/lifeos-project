@@ -217,6 +217,7 @@ def export_activitywatch(target_date: dt.date) -> dict[str, Any] | None:
         }
         summarize_activitywatch_bucket(bucket_id, events, exported["summary"])
 
+    exported = apply_activitywatch_afk_filter(exported)
     out_path = RAW_COMPUTER_DIR / f"{date_name}.activitywatch.json"
     write_json(out_path, exported)
     log(f"ActivityWatch exported: {out_path}")
@@ -251,6 +252,80 @@ def summarize_activitywatch_bucket(bucket_id: str, events: list[dict[str, Any]],
             if url:
                 domain = urllib.parse.urlparse(url).netloc.lower() or url
                 summary["websites"][domain] = summary["websites"].get(domain, 0) + duration
+
+
+def apply_activitywatch_afk_filter(activitywatch: dict[str, Any]) -> dict[str, Any]:
+    intervals = active_intervals_from_activitywatch(activitywatch)
+    if not intervals:
+        return activitywatch
+
+    summary = {"apps": {}, "windows": {}, "websites": {}}
+    for bucket_id, bucket in (activitywatch.get("buckets") or {}).items():
+        if "afk" in bucket_id.lower():
+            continue
+        for event in bucket.get("events") or []:
+            duration = seconds(event.get("duration"))
+            start = parse_event_start(event)
+            if not start or duration <= 0:
+                continue
+            end = start + dt.timedelta(seconds=duration)
+            active_duration = interval_overlap_seconds(start, end, intervals)
+            if active_duration <= 0:
+                continue
+            clipped = dict(event)
+            clipped["duration"] = active_duration
+            summarize_activitywatch_bucket(bucket_id, [clipped], summary)
+
+    activitywatch["summary"] = summary
+    activitywatch["afk_filter"] = {
+        "enabled": True,
+        "active_intervals": len(intervals),
+    }
+    return activitywatch
+
+
+def active_intervals_from_activitywatch(activitywatch: dict[str, Any]) -> list[tuple[dt.datetime, dt.datetime]]:
+    intervals: list[tuple[dt.datetime, dt.datetime]] = []
+    for bucket_id, bucket in (activitywatch.get("buckets") or {}).items():
+        if "afk" not in bucket_id.lower():
+            continue
+        for event in bucket.get("events") or []:
+            data = event.get("data") or {}
+            if str(data.get("status") or "").lower() != "not-afk":
+                continue
+            start = parse_event_start(event)
+            duration = seconds(event.get("duration"))
+            if start and duration > 0:
+                intervals.append((start, start + dt.timedelta(seconds=duration)))
+    return merge_intervals(intervals)
+
+
+def merge_intervals(intervals: list[tuple[dt.datetime, dt.datetime]]) -> list[tuple[dt.datetime, dt.datetime]]:
+    if not intervals:
+        return []
+    ordered = sorted(intervals, key=lambda item: item[0])
+    merged = [ordered[0]]
+    for start, end in ordered[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def interval_overlap_seconds(
+    start: dt.datetime,
+    end: dt.datetime,
+    intervals: list[tuple[dt.datetime, dt.datetime]],
+) -> float:
+    total = 0.0
+    for active_start, active_end in intervals:
+        overlap_start = max(start, active_start)
+        overlap_end = min(end, active_end)
+        if overlap_end > overlap_start:
+            total += (overlap_end - overlap_start).total_seconds()
+    return total
 
 
 def adb_path() -> str:
@@ -612,6 +687,7 @@ def normalize_activity_data(
         if label not in ("phone", "pad"):
             continue
         normalized["sources"][label] = exported.get("source", "android")
+        android_ranges = android_time_ranges(exported)
         apps = []
         for package, duration in (exported.get("apps") or {}).items():
             duration_seconds = seconds(duration)
@@ -623,6 +699,7 @@ def normalize_activity_data(
                     "label": android_app_display_name(exported, package),
                     "seconds": duration_seconds,
                     "source": exported.get("source", "android"),
+                    "top_ranges": format_top_ranges(android_ranges.get(package, [])),
                 }
             )
         normalized["devices"][label]["apps"] = sorted(
@@ -637,6 +714,26 @@ def normalize_activity_data(
         write_json(out_path, normalized)
         log(f"Normalized activity written: {out_path}")
     return normalized
+
+
+def android_time_ranges(exported: dict[str, Any]) -> dict[str, list[tuple[str, str, float]]]:
+    ranges: dict[str, list[tuple[str, str, float]]] = defaultdict(list)
+    for event in exported.get("app_events") or []:
+        package = str(event.get("package") or "").strip()
+        if not package:
+            continue
+        duration = seconds(event.get("duration_seconds") or event.get("duration"))
+        if duration < MIN_SECONDS_IN_NOTE:
+            continue
+        start_ts = event.get("start_ts")
+        end_ts = event.get("end_ts")
+        try:
+            start = dt.datetime.fromtimestamp(float(start_ts)).astimezone()
+            end = dt.datetime.fromtimestamp(float(end_ts)).astimezone()
+        except (TypeError, ValueError, OSError):
+            continue
+        ranges[package].append((start.strftime("%H:%M"), end.strftime("%H:%M"), duration))
+    return ranges
 
 
 def should_filter_computer_app(name: str) -> bool:
