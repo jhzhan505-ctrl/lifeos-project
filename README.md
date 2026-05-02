@@ -72,6 +72,48 @@ D:\LifeOS\journal <-> gdrive:journal
 
 同步策略是保守的：不删除文件，较新的文件覆盖较旧的文件，并排除 `.obsidian`。
 
+## 电脑端近实时上传
+
+为了让电脑编辑后的日记更快出现在手机/平板，项目提供本地文件监听器：
+
+```text
+watch_and_sync.ps1
+start_watch_sync.bat
+start_watch_sync_hidden.vbs
+```
+
+它会监听：
+
+```text
+D:\LifeOS\journal
+```
+
+当你修改日记或模板后，等待约 8 秒自动运行：
+
+```text
+sync_to_cloud.bat
+```
+
+也就是自动上传到：
+
+```text
+Google Drive / journal
+```
+
+已排除 `.obsidian`、自动生成的 `_data/raw/computer`、`_data/normalized`、`_data/ai` 和日志目录，避免脚本自己触发无限同步。
+
+启动器已放入当前用户启动文件夹：
+
+```text
+C:\Users\Bluepea\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\LifeOSWatchSync.vbs
+```
+
+所以登录 Windows 后会自动后台启动。日志在：
+
+```text
+D:\shanghaitech\software\codex\lifeos-project\logs\watch_sync.log
+```
+
 ## 每天自动流程
 
 1. 手机 Android Agent 导出当天使用数据到 `journal/_data/raw/phone`。
