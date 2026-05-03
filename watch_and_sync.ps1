@@ -1,12 +1,14 @@
 param(
     [string]$JournalRoot = "D:\LifeOS\journal",
     [int]$DebounceSeconds = 8,
-    [int]$MinIntervalSeconds = 20
+    [int]$MinIntervalSeconds = 20,
+    [int]$PullIntervalSeconds = 180
 )
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SyncScript = Join-Path $ScriptDir "sync_to_cloud.bat"
+$SyncToScript = Join-Path $ScriptDir "sync_to_cloud.bat"
+$SyncFromScript = Join-Path $ScriptDir "sync_from_cloud.bat"
 $LogDir = Join-Path $ScriptDir "logs"
 $LogFile = Join-Path $LogDir "watch_sync.log"
 $LockFile = Join-Path $LogDir "watch_sync.lock"
@@ -39,6 +41,7 @@ $state = @{
     Syncing = $false
     LastChange = Get-Date
     LastSync = (Get-Date).AddYears(-1)
+    LastPull = (Get-Date).AddYears(-1)
 }
 
 function Should-IgnorePath {
@@ -58,6 +61,9 @@ function Should-IgnorePath {
 
 function Mark-Dirty {
     param($EventArgs)
+    if ($state.Syncing) {
+        return
+    }
     if (Should-IgnorePath $EventArgs.FullPath) {
         return
     }
@@ -86,11 +92,36 @@ function Run-Sync {
     $state.LastSync = Get-Date
     Write-Log "sync_to_cloud started"
     try {
-        $process = Start-Process -FilePath $SyncScript -WorkingDirectory $ScriptDir -WindowStyle Hidden -Wait -PassThru
+        $process = Start-Process -FilePath $SyncToScript -WorkingDirectory $ScriptDir -WindowStyle Hidden -Wait -PassThru
         Write-Log ("sync_to_cloud finished with exit code {0}" -f $process.ExitCode)
     } catch {
         Write-Log ("sync_to_cloud failed: {0}" -f $_.Exception.Message)
         $state.Dirty = $true
+    } finally {
+        $state.Syncing = $false
+    }
+}
+
+function Run-Pull {
+    if ($state.Syncing) {
+        return
+    }
+    $now = Get-Date
+    if (($now - $state.LastPull).TotalSeconds -lt $PullIntervalSeconds) {
+        return
+    }
+    if ($state.Dirty) {
+        return
+    }
+
+    $state.Syncing = $true
+    $state.LastPull = Get-Date
+    Write-Log "sync_from_cloud started"
+    try {
+        $process = Start-Process -FilePath $SyncFromScript -WorkingDirectory $ScriptDir -WindowStyle Hidden -Wait -PassThru
+        Write-Log ("sync_from_cloud finished with exit code {0}" -f $process.ExitCode)
+    } catch {
+        Write-Log ("sync_from_cloud failed: {0}" -f $_.Exception.Message)
     } finally {
         $state.Syncing = $false
     }
@@ -110,11 +141,12 @@ $handlers += Register-ObjectEvent -InputObject $watcher -EventName Deleted -Acti
 $handlers += Register-ObjectEvent -InputObject $watcher -EventName Renamed -Action { Mark-Dirty $Event.SourceEventArgs }
 
 Write-Log ("watching {0}" -f $JournalRoot)
-Write-Log ("debounce={0}s min_interval={1}s" -f $DebounceSeconds, $MinIntervalSeconds)
+Write-Log ("debounce={0}s min_interval={1}s pull_interval={2}s" -f $DebounceSeconds, $MinIntervalSeconds, $PullIntervalSeconds)
 
 try {
     while ($true) {
         Start-Sleep -Seconds 2
+        Run-Pull
         Run-Sync
     }
 } finally {

@@ -100,7 +100,29 @@ sync_to_cloud.bat
 Google Drive / journal
 ```
 
+它也会每 3 分钟自动运行：
+
+```text
+sync_from_cloud.bat
+```
+
+所以手机/平板通过 FolderSync 上传到 Google Drive 后，电脑本地：
+
+```text
+D:\LifeOS\journal
+```
+
+会在几分钟内自动拉取更新，Obsidian 重新聚焦或刷新后即可看到。
+
 已排除 `.obsidian`、自动生成的 `_data/raw/computer`、`_data/normalized`、`_data/ai` 和日志目录，避免脚本自己触发无限同步。
+
+手机/平板 FolderSync 仍建议排除：
+
+```text
+.obsidian/**
+```
+
+截图里出现的 `workspace.json` 就是 Obsidian 配置文件，不建议同步，否则容易反复冲突。
 
 启动器已放入当前用户启动文件夹：
 
