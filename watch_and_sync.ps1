@@ -48,9 +48,12 @@ function Should-IgnorePath {
     param([string]$Path)
     $normalized = $Path.Replace("/", "\")
     return (
-        $normalized -match "\\\.obsidian\\" -or
+        $normalized -match "\\\.obsidian(?:\\|$)" -or
+        $normalized -match "\\\.OBSIDIANTEST(?:\\|$)" -or
         $normalized -match "\\\.trash\\" -or
         $normalized -match "\\_data\\raw\\computer\\" -or
+        $normalized -match "\\_data\\raw\\phone(?:\\|$)" -or
+        $normalized -match "\\_data\\raw\\pad(?:\\|$)" -or
         $normalized -match "\\_data\\normalized\\" -or
         $normalized -match "\\_data\\ai\\" -or
         $normalized -match "\\_system\\logs\\" -or
